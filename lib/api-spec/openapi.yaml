@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ARN INFRA API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: work-entries
+    description: Work entry operations
+  - name: reports
+    description: Reports and exports
 paths:
   /healthz:
     get:
@@ -24,6 +32,325 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users:
+    get:
+      operationId: getUsers
+      tags: [users]
+      summary: List all users
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: User deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /work-entries:
+    get:
+      operationId: getWorkEntries
+      tags: [work-entries]
+      summary: List work entries
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: List of work entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkEntry"
+    post:
+      operationId: createWorkEntry
+      tags: [work-entries]
+      summary: Create a work entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkEntryBody"
+      responses:
+        "201":
+          description: Work entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkEntry"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /work-entries/{id}:
+    patch:
+      operationId: updateWorkEntry
+      tags: [work-entries]
+      summary: Update a work entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkEntryBody"
+      responses:
+        "200":
+          description: Work entry updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkEntry"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteWorkEntry
+      tags: [work-entries]
+      summary: Delete a work entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Work entry deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/summary:
+    get:
+      operationId: getReportSummary
+      tags: [reports]
+      summary: Get summary report
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Summary report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportSummary"
+
+  /reports/export-excel:
+    get:
+      operationId: exportExcel
+      tags: [reports]
+      summary: Export work entries to Excel
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /reports/export-pdf:
+    get:
+      operationId: exportPdf
+      tags: [reports]
+      summary: Export work entries to PDF
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [reports]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +361,192 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - role
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator]
+      required:
+        - name
+        - email
+        - password
+        - role
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator]
+        password:
+          type: string
+
+    WorkEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+        labourCount:
+          type: integer
+        squareMeter:
+          type: number
+        workingChannel:
+          type: string
+        createdBy:
+          type: integer
+        createdByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - date
+        - labourCount
+        - squareMeter
+        - workingChannel
+        - createdBy
+        - createdAt
+
+    CreateWorkEntryBody:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        labourCount:
+          type: integer
+        squareMeter:
+          type: number
+        workingChannel:
+          type: string
+      required:
+        - date
+        - labourCount
+        - squareMeter
+        - workingChannel
+
+    UpdateWorkEntryBody:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        labourCount:
+          type: integer
+        squareMeter:
+          type: number
+        workingChannel:
+          type: string
+
+    ReportSummary:
+      type: object
+      properties:
+        totalEntries:
+          type: integer
+        totalLabour:
+          type: integer
+        totalSquareMeter:
+          type: number
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkEntry"
+      required:
+        - totalEntries
+        - totalLabour
+        - totalSquareMeter
+        - entries
+
+    DashboardStats:
+      type: object
+      properties:
+        todayLabour:
+          type: integer
+        todaySquareMeter:
+          type: number
+        monthLabour:
+          type: integer
+        monthSquareMeter:
+          type: number
+        totalEntries:
+          type: integer
+        recentEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkEntry"
+      required:
+        - todayLabour
+        - todaySquareMeter
+        - monthLabour
+        - monthSquareMeter
+        - totalEntries
+        - recentEntries
