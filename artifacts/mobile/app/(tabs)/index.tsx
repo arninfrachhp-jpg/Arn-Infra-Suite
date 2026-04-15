@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetDashboardStatsQueryKey,
@@ -11,21 +11,22 @@ import {
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Input } from "@/components/Input";
+import { CalendarPicker } from "@/components/CalendarPicker";
 import { useColors } from "@/hooks/useColors";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 
 export default function EntryScreen() {
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]!);
   const [labourCount, setLabourCount] = useState("");
   const [squareMeter, setSquareMeter] = useState("");
   const [workingChannel, setWorkingChannel] = useState("");
-  
+
   const colors = useColors();
   const createEntry = useCreateWorkEntry();
   const queryClient = useQueryClient();
 
   const handleSave = async () => {
-    if (!date || !labourCount || !squareMeter || !workingChannel) {
+    if (!date || !labourCount || !squareMeter || !workingChannel.trim()) {
       Alert.alert("Missing Fields", "Please fill out all fields before saving.");
       return;
     }
@@ -33,13 +34,13 @@ export default function EntryScreen() {
     const count = parseInt(labourCount, 10);
     const sqM = parseFloat(squareMeter);
 
-    if (isNaN(count) || count < 0) {
-      Alert.alert("Invalid Input", "Labour count must be a valid positive number.");
+    if (isNaN(count) || count < 1) {
+      Alert.alert("Invalid Input", "Labour count must be a positive number.");
       return;
     }
 
-    if (isNaN(sqM) || sqM < 0) {
-      Alert.alert("Invalid Input", "Square meters must be a valid positive number.");
+    if (isNaN(sqM) || sqM <= 0) {
+      Alert.alert("Invalid Input", "Square meters must be a positive number.");
       return;
     }
 
@@ -49,23 +50,23 @@ export default function EntryScreen() {
           date,
           labourCount: count,
           squareMeter: sqM,
-          workingChannel,
+          workingChannel: workingChannel.trim(),
         },
       });
 
       Alert.alert("Success", "Work entry saved successfully!");
-      
-      // Reset form (keep date)
+
       setLabourCount("");
       setSquareMeter("");
       setWorkingChannel("");
+      // Keep date as-is for convenience
 
-      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: getGetWorkEntriesQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetReportSummaryQueryKey() });
     } catch (error: any) {
-      Alert.alert("Error", error?.response?.data?.error || "Failed to save entry.");
+      const msg = error?.data?.error || error?.message || "Failed to save entry.";
+      Alert.alert("Error", msg);
     }
   };
 
@@ -82,11 +83,10 @@ export default function EntryScreen() {
       </View>
 
       <Card>
-        <Input
-          label="Date (YYYY-MM-DD)"
-          placeholder="2023-10-25"
+        <CalendarPicker
+          label="Date"
           value={date}
-          onChangeText={setDate}
+          onChange={setDate}
         />
         <Input
           label="Labour Count"
@@ -121,25 +121,10 @@ export default function EntryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 100, // For tab bar
-  },
-  header: {
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-  },
-  saveButton: {
-    marginTop: 16,
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 100 },
+  header: { marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 4 },
+  subtitle: { fontSize: 16 },
+  saveButton: { marginTop: 8 },
 });

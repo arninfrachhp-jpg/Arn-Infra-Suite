@@ -95,7 +95,8 @@ export default function UsersScreen() {
       setModalVisible(false);
       refetch();
     } catch (err: any) {
-      Alert.alert("Error", err?.response?.data?.error || "Failed to save user.");
+      const msg = err?.data?.error || err?.message || "Failed to save user.";
+      Alert.alert("Error", msg);
     }
   };
 

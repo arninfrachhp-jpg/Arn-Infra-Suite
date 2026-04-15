@@ -21,7 +21,10 @@ router.get("/users", authMiddleware, adminOnly, async (_req, res): Promise<void>
 router.post("/users", authMiddleware, adminOnly, async (req, res): Promise<void> => {
   const parsed = CreateUserBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    const firstIssue = parsed.error.issues?.[0];
+    const field = firstIssue?.path?.join(".") || "field";
+    const msg = firstIssue?.message || parsed.error.message;
+    res.status(400).json({ error: `${field}: ${msg}` });
     return;
   }
 

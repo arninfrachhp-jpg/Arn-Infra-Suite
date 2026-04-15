@@ -37,7 +37,10 @@ router.get("/work-entries", authMiddleware, async (req, res): Promise<void> => {
 router.post("/work-entries", authMiddleware, async (req, res): Promise<void> => {
   const parsed = CreateWorkEntryBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    const firstIssue = parsed.error.issues?.[0];
+    const field = firstIssue?.path?.join(".") || "field";
+    const msg = firstIssue?.message || parsed.error.message;
+    res.status(400).json({ error: `${field}: ${msg}` });
     return;
   }
 
