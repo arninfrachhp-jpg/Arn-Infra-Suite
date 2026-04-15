@@ -2,7 +2,10 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetDashboardStatsQueryKey,
+  getGetWorkEntriesQueryKey,
+  useDeleteWorkEntry,
   useGetDashboardStats,
+  useGetWorkEntries,
 } from "@workspace/api-client-react";
 import React, { useState } from "react";
 import {
@@ -13,6 +16,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -28,61 +32,127 @@ export default function DashboardScreen() {
   const queryClient = useQueryClient();
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // If not admin, shouldn't be here, but just in case
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isRefetching } = useGetDashboardStats({
+    query: { enabled: user?.role === "admin" },
+  });
+
+  const { data: allEntries, isLoading: entriesLoading, refetch: refetchEntries } = useGetWorkEntries(undefined, {
+    query: { enabled: user?.role === "admin" },
+  });
+
+  const deleteEntry = useDeleteWorkEntry();
+
   if (user?.role !== "admin") {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.foreground }}>Access Denied</Text>
+        <Feather name="lock" size={40} color={colors.mutedForeground} />
+        <Text style={{ color: colors.mutedForeground, marginTop: 12, fontSize: 16 }}>Admin access required</Text>
       </View>
     );
   }
 
-  const { data: stats, isLoading, isError, refetch, isRefetching } = useGetDashboardStats({
-    query: { enabled: true },
-  });
-
-  const handleExport = async (type: "excel" | "pdf") => {
+  const handleExportExcel = async () => {
     try {
-      if (type === "excel") setIsExportingExcel(true);
-      else setIsExportingPdf(true);
-
+      setIsExportingExcel(true);
       const token = await AsyncStorage.getItem("auth_token");
-      const url = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/reports/export/${type}`;
-      
+      const url = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/reports/export-excel`;
+
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) {
-        throw new Error(`Export failed with status: ${response.status}`);
+        throw new Error(`Export failed: ${response.status}`);
       }
 
-      const blob = await response.blob();
-      
       if (Platform.OS === "web") {
+        const blob = await response.blob();
         const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = downloadUrl;
-        a.download = `report.${type === "excel" ? "xlsx" : "pdf"}`;
+        a.download = "work-entries.csv";
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(downloadUrl);
+        Alert.alert("Success", "Excel/CSV file downloaded.");
       } else {
-        // Since we cannot install expo-file-system properly, we'll alert on native for this scaffold.
-        Alert.alert("Export Successful", "Check your files.");
+        const text = await response.text();
+        Alert.alert("Export Data", `CSV data ready:\n\n${text.slice(0, 300)}...`);
       }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Export Failed", "There was an error exporting the report.");
+    } catch (error: any) {
+      Alert.alert("Export Failed", error.message || "Could not export to Excel.");
     } finally {
-      if (type === "excel") setIsExportingExcel(false);
-      else setIsExportingPdf(false);
+      setIsExportingExcel(false);
     }
   };
+
+  const handleExportPdf = async () => {
+    try {
+      setIsExportingPdf(true);
+      const token = await AsyncStorage.getItem("auth_token");
+      const url = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/reports/export-pdf`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`);
+      }
+
+      if (Platform.OS === "web") {
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = "work-report.html";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        Alert.alert("Success", "Report downloaded.");
+      } else {
+        Alert.alert("Success", "PDF report generated. Open in browser to view.");
+      }
+    } catch (error: any) {
+      Alert.alert("Export Failed", error.message || "Could not export PDF.");
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleDelete = (id: number, date: string) => {
+    Alert.alert(
+      "Delete Entry",
+      `Are you sure you want to delete the entry for ${date}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingId(id);
+              await deleteEntry.mutateAsync({ id });
+              queryClient.invalidateQueries({ queryKey: getGetWorkEntriesQueryKey() });
+              queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+              refetchStats();
+              refetchEntries();
+            } catch {
+              Alert.alert("Error", "Failed to delete entry. Please try again.");
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isLoading = statsLoading || entriesLoading;
 
   if (isLoading && !stats) {
     return (
@@ -92,198 +162,161 @@ export default function DashboardScreen() {
     );
   }
 
-  if (isError) {
+  if (statsError) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.destructive }}>Failed to load dashboard.</Text>
-        <Button title="Retry" onPress={() => refetch()} style={{ marginTop: 16 }} />
+        <Feather name="alert-circle" size={32} color={colors.destructive} />
+        <Text style={{ color: colors.destructive, marginTop: 12 }}>Failed to load dashboard.</Text>
+        <Button title="Retry" onPress={() => refetchStats()} style={{ marginTop: 16 }} />
       </View>
     );
   }
+
+  const entries = allEntries ?? [];
+  const sortedEntries = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        <RefreshControl
+          refreshing={isRefetching}
+          onRefresh={() => { refetchStats(); refetchEntries(); }}
+          tintColor={colors.primary}
+        />
       }
     >
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.foreground }]}>Dashboard</Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          Overview of field operations
+      {/* Stats Grid */}
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Overview</Text>
+      <View style={styles.statsGrid}>
+        <Card style={styles.statCard}>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Today Labour</Text>
+          <Text style={[styles.statValue, { color: colors.primary }]}>{stats?.todayLabour ?? 0}</Text>
+        </Card>
+        <Card style={styles.statCard}>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Today Sqm</Text>
+          <Text style={[styles.statValue, { color: colors.primary }]}>{stats?.todaySquareMeter ?? 0}</Text>
+        </Card>
+        <Card style={styles.statCard}>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Month Labour</Text>
+          <Text style={[styles.statValue, { color: "#1E3A5F" }]}>{stats?.monthLabour ?? 0}</Text>
+        </Card>
+        <Card style={styles.statCard}>
+          <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Month Sqm</Text>
+          <Text style={[styles.statValue, { color: "#1E3A5F" }]}>{stats?.monthSquareMeter ?? 0}</Text>
+        </Card>
+      </View>
+
+      {/* Export Buttons */}
+      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Export Reports</Text>
+      <View style={styles.exportButtons}>
+        <Button
+          title="Export Excel"
+          icon={<Feather name="download" size={16} color="#fff" />}
+          onPress={handleExportExcel}
+          isLoading={isExportingExcel}
+          style={[styles.exportBtn, { backgroundColor: "#16a34a" }]}
+        />
+        <Button
+          title="Export PDF"
+          icon={<Feather name="file-text" size={16} color="#fff" />}
+          onPress={handleExportPdf}
+          isLoading={isExportingPdf}
+          style={[styles.exportBtn, { backgroundColor: "#dc2626" }]}
+        />
+      </View>
+
+      {/* All Entries with Delete */}
+      <View style={styles.entriesHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 0 }]}>
+          All Entries ({sortedEntries.length})
         </Text>
       </View>
 
-      <View style={styles.statsGrid}>
-        <Card style={styles.statCard}>
-          <View style={styles.statHeader}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Today's Labour</Text>
-            <Feather name="users" size={16} color={colors.primary} />
-          </View>
-          <Text style={[styles.statValue, { color: colors.foreground }]}>{stats?.todayLabour || 0}</Text>
+      {sortedEntries.length === 0 ? (
+        <Card style={styles.emptyCard}>
+          <Feather name="inbox" size={32} color={colors.mutedForeground} style={{ alignSelf: "center", marginBottom: 8 }} />
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No work entries found.</Text>
         </Card>
-
-        <Card style={styles.statCard}>
-          <View style={styles.statHeader}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Today's Sqm</Text>
-            <Feather name="maximize" size={16} color={colors.primary} />
-          </View>
-          <Text style={[styles.statValue, { color: colors.foreground }]}>{stats?.todaySquareMeter || 0}</Text>
-        </Card>
-
-        <Card style={styles.statCard}>
-          <View style={styles.statHeader}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Month's Labour</Text>
-            <Feather name="users" size={16} color={colors.foreground} />
-          </View>
-          <Text style={[styles.statValue, { color: colors.foreground }]}>{stats?.monthLabour || 0}</Text>
-        </Card>
-
-        <Card style={styles.statCard}>
-          <View style={styles.statHeader}>
-            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Month's Sqm</Text>
-            <Feather name="maximize" size={16} color={colors.foreground} />
-          </View>
-          <Text style={[styles.statValue, { color: colors.foreground }]}>{stats?.monthSquareMeter || 0}</Text>
-        </Card>
-      </View>
-
-      <View style={styles.exportSection}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Export Reports</Text>
-        <View style={styles.exportButtons}>
-          <Button
-            title="Export Excel"
-            icon={<Feather name="file-text" size={18} color={colors.primaryForeground} />}
-            onPress={() => handleExport("excel")}
-            isLoading={isExportingExcel}
-            style={styles.exportBtn}
-          />
-          <Button
-            title="Export PDF"
-            icon={<Feather name="file" size={18} color={colors.secondaryForeground} />}
-            variant="secondary"
-            onPress={() => handleExport("pdf")}
-            isLoading={isExportingPdf}
-            style={styles.exportBtn}
-          />
-        </View>
-      </View>
-
-      <View style={styles.recentSection}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Entries</Text>
-        {stats?.recentEntries?.length === 0 ? (
-          <Text style={{ color: colors.mutedForeground, marginTop: 8 }}>No recent entries found.</Text>
-        ) : (
-          stats?.recentEntries?.map((entry) => (
-            <Card key={entry.id} style={styles.entryCard}>
-              <View style={styles.entryRow}>
-                <Text style={[styles.entryDate, { color: colors.foreground }]}>{new Date(entry.date).toLocaleDateString()}</Text>
-                <Text style={[styles.entryAuthor, { color: colors.primary }]}>{entry.createdByName}</Text>
+      ) : (
+        sortedEntries.map((entry) => (
+          <Card key={entry.id} style={styles.entryCard}>
+            <View style={styles.entryTopRow}>
+              <View style={[styles.dateBadge, { backgroundColor: colors.primary + "20" }]}>
+                <Text style={[styles.dateText, { color: colors.primary }]}>{entry.date}</Text>
               </View>
-              <View style={styles.entryDetails}>
-                <Text style={{ color: colors.mutedForeground }}>Labour: {entry.labourCount}</Text>
-                <Text style={{ color: colors.mutedForeground }}>Sqm: {entry.squareMeter}</Text>
+              <TouchableOpacity
+                onPress={() => handleDelete(entry.id, entry.date)}
+                disabled={deletingId === entry.id}
+                style={[styles.deleteBtn, { backgroundColor: colors.destructive + "15" }]}
+              >
+                {deletingId === entry.id ? (
+                  <ActivityIndicator size="small" color={colors.destructive} />
+                ) : (
+                  <Feather name="trash-2" size={16} color={colors.destructive} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.entryStats}>
+              <View style={styles.entryStat}>
+                <Feather name="users" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.entryStatValue, { color: colors.foreground }]}>{entry.labourCount}</Text>
+                <Text style={[styles.entryStatLabel, { color: colors.mutedForeground }]}>Labour</Text>
               </View>
-              <Text style={[styles.entryChannel, { color: colors.foreground }]}>{entry.workingChannel}</Text>
-            </Card>
-          ))
-        )}
-      </View>
+              <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+              <View style={styles.entryStat}>
+                <Feather name="maximize-2" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.entryStatValue, { color: colors.foreground }]}>{entry.squareMeter}</Text>
+                <Text style={[styles.entryStatLabel, { color: colors.mutedForeground }]}>Sqm</Text>
+              </View>
+              <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+              <View style={[styles.entryStat, { flex: 2 }]}>
+                <Feather name="map-pin" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.entryStatValue, { color: colors.foreground }]} numberOfLines={1}>
+                  {entry.workingChannel}
+                </Text>
+                <Text style={[styles.entryStatLabel, { color: colors.mutedForeground }]}>Channel</Text>
+              </View>
+            </View>
+
+            {entry.createdByName ? (
+              <Text style={[styles.createdBy, { color: colors.mutedForeground }]}>
+                By: {entry.createdByName}
+              </Text>
+            ) : null}
+          </Card>
+        ))
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  statCard: {
-    width: "48%",
-    marginBottom: 16,
-    padding: 16,
-  },
-  statHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  exportSection: {
-    marginBottom: 24,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-  },
-  exportButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  exportBtn: {
-    flex: 1,
-  },
-  recentSection: {
-    marginBottom: 24,
-  },
-  entryCard: {
-    padding: 16,
-    marginBottom: 12,
-  },
-  entryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  entryDate: {
-    fontWeight: "bold",
-  },
-  entryAuthor: {
-    fontWeight: "500",
-  },
-  entryDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  entryChannel: {
-    fontSize: 14,
-    fontStyle: "italic",
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1 },
+  content: { padding: 16, paddingTop: 20, paddingBottom: 110 },
+  sectionTitle: { fontSize: 17, fontWeight: "700", marginBottom: 12, marginTop: 8 },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+  statCard: { width: "47%", padding: 14 },
+  statLabel: { fontSize: 12, fontWeight: "500", marginBottom: 4 },
+  statValue: { fontSize: 26, fontWeight: "800" },
+  exportButtons: { flexDirection: "row", gap: 10, marginBottom: 24 },
+  exportBtn: { flex: 1 },
+  entriesHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  entryCard: { padding: 14, marginBottom: 10 },
+  entryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  dateBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  dateText: { fontSize: 13, fontWeight: "700" },
+  deleteBtn: { width: 34, height: 34, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+  entryStats: { flexDirection: "row", alignItems: "center", gap: 8 },
+  entryStat: { flex: 1, alignItems: "center", gap: 2 },
+  entryStatValue: { fontSize: 15, fontWeight: "700" },
+  entryStatLabel: { fontSize: 10, fontWeight: "500" },
+  statDivider: { width: 1, height: 32, borderRadius: 1 },
+  createdBy: { fontSize: 11, marginTop: 10, fontStyle: "italic" },
+  emptyCard: { padding: 24, alignItems: "center" },
+  emptyText: { fontSize: 15, textAlign: "center" },
+  secondary: { fontSize: 24, fontWeight: "800" },
 });
