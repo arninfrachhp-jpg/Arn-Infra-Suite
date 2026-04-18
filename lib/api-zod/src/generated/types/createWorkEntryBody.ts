@@ -7,7 +7,7 @@
  */
 
 export interface CreateWorkEntryBody {
-  date: Date;
+  date: string;
   labourCount: number;
   squareMeter: number;
   workingChannel: string;

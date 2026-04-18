@@ -120,7 +120,7 @@ export const GetWorkEntriesResponse = zod.array(GetWorkEntriesResponseItem);
  * @summary Create a work entry
  */
 export const CreateWorkEntryBody = zod.object({
-  date: zod.coerce.date(),
+  date: zod.string(),
   labourCount: zod.number(),
   squareMeter: zod.number(),
   workingChannel: zod.string(),
@@ -134,7 +134,7 @@ export const UpdateWorkEntryParams = zod.object({
 });
 
 export const UpdateWorkEntryBody = zod.object({
-  date: zod.coerce.date().optional(),
+  date: zod.string().optional(),
   labourCount: zod.number().optional(),
   squareMeter: zod.number().optional(),
   workingChannel: zod.string().optional(),
