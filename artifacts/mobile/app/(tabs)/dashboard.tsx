@@ -35,11 +35,11 @@ export default function DashboardScreen() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isRefetching } = useGetDashboardStats({
-    query: { enabled: user?.role === "admin" },
+    query: { enabled: user?.role === "admin", queryKey: getGetDashboardStatsQueryKey() },
   });
 
   const { data: allEntries, isLoading: entriesLoading, refetch: refetchEntries } = useGetWorkEntries(undefined, {
-    query: { enabled: user?.role === "admin" },
+    query: { enabled: user?.role === "admin", queryKey: getGetWorkEntriesQueryKey() },
   });
 
   const deleteEntry = useDeleteWorkEntry();

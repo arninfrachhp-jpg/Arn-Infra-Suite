@@ -16,7 +16,14 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.arninfra.fieldmanagement",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#1E3A5F"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

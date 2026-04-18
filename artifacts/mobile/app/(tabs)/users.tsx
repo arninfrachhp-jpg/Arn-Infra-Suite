@@ -38,7 +38,7 @@ export default function UsersScreen() {
   const [role, setRole] = useState<UserRole>("operator");
 
   const { data: users, isLoading, refetch, isRefetching } = useGetUsers({
-    query: { enabled: true },
+    query: { enabled: true, queryKey: getGetUsersQueryKey() },
   });
 
   const createUser = useCreateUser();
